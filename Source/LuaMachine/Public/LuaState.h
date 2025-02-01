@@ -249,6 +249,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lua")
 	FString ExecuteUGCFunction(const FString& Code);
 
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	void DestroyUGCFunction();
+
 	void FromLuaValue(FLuaValue& LuaValue, UObject* CallContext = nullptr, lua_State* State = nullptr);
 	FLuaValue ToLuaValue(int Index, lua_State* State = nullptr);
 
@@ -516,6 +519,8 @@ protected:
 	TMap<TWeakObjectPtr<UObject>, FLuaDelegateGroup> LuaDelegatesMap;
 
 	FLuaCommandExecutor LuaConsole;
+
+	lua_State* ugc_thread;
 };
 
 #define LUACFUNCTION(FuncClass, FuncName, NumRetValues, NumArgs) static int FuncName ## _C(lua_State* L)\

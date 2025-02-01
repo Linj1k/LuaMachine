@@ -323,34 +323,34 @@ FLuaValue ULuaState::GetLuaBlueprintPackageTable(const FString& PackageName)
 }
 
 void setup_sandbox(lua_State* L) {
-	// Crée une table d'environnement pour le sandbox
+	// Creates an environment table for the sandbox
 	lua_newtable(L);
 	int sandbox_globals_index = lua_gettop(L);
 
-	// Crée une table d'environnement sans interaction avec _G global
+	// Creates an environment table without interacting with _G global
 	lua_newtable(L);
 
-	// Crée un métatable pour contrôler les accès (lecture/écriture)
+	// Creates a metatable to control access (read/write)
 	lua_newtable(L);
 
-	// __index : permet l'accès à la table sandbox_globals (lecture des variables)
+	// __index : allows access to sandbox_globals table (read variables)
 	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, sandbox_globals_index); // Référence la table sandbox_globals
+	lua_pushvalue(L, sandbox_globals_index); // Reference the sandbox_globals table
 	lua_rawset(L, -3);
 
-	// __newindex : redirige l'écriture vers la table sandbox_globals
+	// __newindex : redirects writing to sandbox_globals table
 	lua_pushliteral(L, "__newindex");
-	lua_pushvalue(L, sandbox_globals_index); // Référence la table sandbox_globals
+	lua_pushvalue(L, sandbox_globals_index); // Reference the sandbox_globals table
 	lua_rawset(L, -3);
 
-	// Applique la métatable à l'environnement
+	// Apply metatable to the environment
 	lua_setmetatable(L, -2);
 
-	// Définit cette table comme _G pour le thread (cela isole l'environnement)
-	lua_pushvalue(L, -1); // Duplique la table d'environnement
+	// Defines this table as _G for the thread (this isolates the environment)
+	lua_pushvalue(L, -1); // Duplicates the environment table
 	lua_setglobal(L, "_G");
 
-	// Nettoie la pile (supprime la référence à sandbox_globals)
+	// Cleans stack (removes reference to sandbox_globals)
 	lua_pop(L, 1);
 }
 
@@ -362,43 +362,53 @@ FString ULuaState::ExecuteUGCFunction(const FString& Code)
 {
 	std::string user_code_str(TCHAR_TO_UTF8(*Code));
 
-    // Crée un thread Lua
-    lua_State* thread = lua_newthread(L);
+	this->DestroyUGCFunction();
 
-    setup_sandbox(thread);
+    // Create a Lua thread
+	ugc_thread = lua_newthread(L);
 
-    lua_sethook(thread, interruption_hook, LUA_MASKCOUNT, HookInstructionCount);
+    setup_sandbox(ugc_thread);
 
-    // Charge le code utilisateur
-    if (luaL_loadstring(thread, user_code_str.c_str()) != LUA_OK) {
-        FString ErrorS = ANSI_TO_TCHAR(lua_tostring(thread, -1));
+    lua_sethook(ugc_thread, interruption_hook, LUA_MASKCOUNT, HookInstructionCount);
+
+    // Load user code
+    if (luaL_loadstring(ugc_thread, user_code_str.c_str()) != LUA_OK) {
+        FString ErrorS = ANSI_TO_TCHAR(lua_tostring(ugc_thread, -1));
         UE_LOG(LogLuaMachine, Error, TEXT("%s"), *ErrorS);
-        lua_pop(thread, 1);
+        lua_pop(ugc_thread, 1);
         lua_pop(L, 1);
         return ErrorS;
     }
 
-    // Exécute le code utilisateur
-    int status = lua_resume(thread, NULL, 0);
+    // Executes user code
+    int status = lua_resume(ugc_thread, NULL, 0);
     if (status == LUA_OK) {
-        UE_LOG(LogLuaMachine, Display, TEXT("Le thread s'est terminé avec succès."));
-        lua_pop(thread, 1);
+        UE_LOG(LogLuaMachine, Display, TEXT("The UGC thread was successfully completed."));
         lua_pop(L, 1);
         return "Success";
     }
     else if (status == LUA_YIELD) {
-        UE_LOG(LogLuaMachine, Display, TEXT("Le thread a été mis en pause."));
-        lua_pop(thread, 1);
+        UE_LOG(LogLuaMachine, Display, TEXT("The UGC thread has been paused."));
+        lua_pop(ugc_thread, 1);
+		ugc_thread = nullptr;
         lua_pop(L, 1);
         return "Yield";
     }
     else {
-        FString ErrorS = ANSI_TO_TCHAR(lua_tostring(thread, -1));
-        UE_LOG(LogLuaMachine, Error, TEXT("%s"), *ErrorS);
-        lua_pop(thread, 1);
+        FString ErrorS = ANSI_TO_TCHAR(lua_tostring(ugc_thread, -1));
+        UE_LOG(LogLuaMachine, Error, TEXT("UGC thread error: %s"), *ErrorS);
+        lua_pop(ugc_thread, 1);
+		ugc_thread = nullptr;
         lua_pop(L, 1);
         return ErrorS;
     }
+}
+
+void ULuaState::DestroyUGCFunction() {
+	if (ugc_thread != nullptr) {
+		lua_pop(ugc_thread, 1);
+		ugc_thread = nullptr;
+	}
 }
 
 bool ULuaState::RunCodeAsset(ULuaCode* CodeAsset, int NRet)
