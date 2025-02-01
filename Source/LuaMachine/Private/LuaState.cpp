@@ -384,21 +384,20 @@ FString ULuaState::ExecuteUGCFunction(const FString& Code)
     int status = lua_resume(ugc_thread, NULL, 0);
     if (status == LUA_OK) {
         UE_LOG(LogLuaMachine, Display, TEXT("The UGC thread was successfully completed."));
+
         lua_pop(L, 1);
         return "Success";
     }
     else if (status == LUA_YIELD) {
         UE_LOG(LogLuaMachine, Display, TEXT("The UGC thread has been paused."));
-        lua_pop(ugc_thread, 1);
-		ugc_thread = nullptr;
+		this->DestroyUGCFunction();
         lua_pop(L, 1);
         return "Yield";
     }
     else {
         FString ErrorS = ANSI_TO_TCHAR(lua_tostring(ugc_thread, -1));
         UE_LOG(LogLuaMachine, Error, TEXT("UGC thread error: %s"), *ErrorS);
-        lua_pop(ugc_thread, 1);
-		ugc_thread = nullptr;
+		this->DestroyUGCFunction();
         lua_pop(L, 1);
         return ErrorS;
     }
