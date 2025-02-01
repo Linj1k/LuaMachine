@@ -13,6 +13,7 @@
   "CanContainContent": true,
   "IsBetaVersion": false,
   "Installed": false,
+  "EngineVersion": "5.5",
   "Modules": [
     {
       "Name": "LuaMachine",

@@ -50,6 +50,7 @@ void FLuaValueCustomization::LuaFunctionChanged(TSharedPtr<FString> Value, ESele
 		return;
 
 	UClass* ObjectClass = Objects[0]->GetClass();
+	UClass* OwnerClass = nullptr;
 
 	ULuaComponent* LuaComponent = Cast<ULuaComponent>(Objects[0]);
 	if (LuaComponent)
@@ -57,14 +58,23 @@ void FLuaValueCustomization::LuaFunctionChanged(TSharedPtr<FString> Value, ESele
 		AActor* Actor = LuaComponent->GetOwner();
 		if (Actor)
 		{
-			ObjectClass = Actor->GetClass();
+			OwnerClass = Actor->GetClass();
 		}
 		else
 		{
 			UBlueprintGeneratedClass* BlueprintClass = Cast<UBlueprintGeneratedClass>(LuaComponent->GetOuter());
 			if (BlueprintClass)
 			{
-				ObjectClass = BlueprintClass;
+				OwnerClass = BlueprintClass;
+			}
+		}
+
+		if (OwnerClass != nullptr) {
+			UFunction* FoundFunction = OwnerClass->FindFunctionByName(FName(*(*Value.Get())));
+			if (FoundFunction)
+			{
+				PropertyHandle->SetValue(FoundFunction->GetName());
+				return;
 			}
 		}
 	}
@@ -113,6 +123,7 @@ void FLuaValueCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> Prope
 	TSharedPtr<FString> CurrentSelectedFunction;
 
 	UClass* ObjectClass = Objects[0]->GetClass();
+	UClass* OwnerClass = nullptr;
 
 	bool bAllowsRawCall = false;
 
@@ -122,15 +133,95 @@ void FLuaValueCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> Prope
 		AActor* Actor = LuaComponent->GetOwner();
 		if (Actor)
 		{
-			ObjectClass = Actor->GetClass();
+			OwnerClass = Actor->GetClass();
 		}
 		else
 		{
 			UBlueprintGeneratedClass* BlueprintClass = Cast<UBlueprintGeneratedClass>(LuaComponent->GetOuter());
 			if (BlueprintClass)
 			{
-				ObjectClass = BlueprintClass;
+				OwnerClass = BlueprintClass;
 			}
+		}
+
+		if (OwnerClass != nullptr) {
+			for (TFieldIterator<UFunction> Funcs(OwnerClass); Funcs; ++Funcs)
+			{
+				UFunction* Function = *Funcs;
+
+				// Verifie si la fonction est exposé au blueprint
+				if (!Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_BlueprintCallable) && !Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_BlueprintPure) && !Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_BlueprintEvent))
+					continue;
+
+				/*if (!Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_Public))
+					continue;*/
+
+				bool bIsValid = true;
+
+				if (!bAllowsRawCall)
+				{
+#if ENGINE_MAJOR_VERSION > 4 || ENGINE_MINOR_VERSION >= 25
+					for (TFieldIterator<FProperty> FArgs(Function); FArgs && FArgs->PropertyFlags & CPF_Parm; ++FArgs)
+#else
+					for (TFieldIterator<UProperty> FArgs(Function); FArgs && FArgs->PropertyFlags & CPF_Parm; ++FArgs)
+#endif
+					{
+#if ENGINE_MAJOR_VERSION > 4 || ENGINE_MINOR_VERSION >= 25
+						FProperty* Prop = *FArgs;
+						FStructProperty* LuaProp = CastField<FStructProperty>(Prop);
+#else
+						UProperty* Prop = *FArgs;
+						UStructProperty* LuaProp = Cast<UStructProperty>(Prop);
+#endif
+						if (!LuaProp)
+						{
+							// check for array ?
+#if ENGINE_MAJOR_VERSION > 4 || ENGINE_MINOR_VERSION >= 25
+							FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop);
+#else
+							UArrayProperty* ArrayProp = Cast<UArrayProperty>(Prop);
+#endif
+							if (ArrayProp)
+							{
+#if ENGINE_MAJOR_VERSION > 4 || ENGINE_MINOR_VERSION >= 25
+								LuaProp = CastField<FStructProperty>(ArrayProp->Inner);
+#else
+								LuaProp = Cast<UStructProperty>(ArrayProp->Inner);
+#endif
+								if (!LuaProp)
+								{
+									bIsValid = false;
+									break;
+								}
+							}
+							else {
+								bIsValid = false;
+								break;
+							}
+						}
+						if (LuaProp->Struct != FLuaValue::StaticStruct())
+						{
+							bIsValid = false;
+							break;
+						}
+					}
+				}
+
+				if (!bIsValid)
+				{
+					continue;
+				}
+
+				TSharedPtr<FString> FunctionNameSP = MakeShareable(new FString(Function->GetName()));
+
+				if (CurrentFunctionName == Function->GetName())
+				{
+					CurrentSelectedFunction = FunctionNameSP;
+				}
+
+				ValidLuaFunctions.Add(FunctionNameSP);
+			}
+
 		}
 	}
 	else if (ULuaState* LuaState = Cast<ULuaState>(Objects[0]))
@@ -138,9 +229,28 @@ void FLuaValueCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> Prope
 		bAllowsRawCall = LuaState->bRawLuaFunctionCall;
 	}
 
+
 	for (TFieldIterator<UFunction> Funcs(ObjectClass); Funcs; ++Funcs)
 	{
 		UFunction* Function = *Funcs;
+
+		// Verifie si la fonction est exposé au blueprint
+		if (!Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_BlueprintCallable) && !Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_BlueprintPure) && !Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_BlueprintEvent))
+			continue;
+
+		// check in ValidLuaFunctions if already have function by name
+		bool bFunctionExists = false;
+		for (const TSharedPtr<FString>& ValidFunction : ValidLuaFunctions)
+		{
+			if (*ValidFunction == Function->GetName())
+			{
+				bFunctionExists = true;
+				break;
+			}
+		}
+
+		if (bFunctionExists) continue;
+
 
 		/*if (!Function->HasAnyFunctionFlags(EFunctionFlags::FUNC_Public))
 			continue;*/

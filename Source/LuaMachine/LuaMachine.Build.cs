@@ -1,5 +1,6 @@
 // Copyright 2018-2023 - Roberto De Ioris
 
+using System.IO;
 using UnrealBuildTool;
 
 public class LuaMachine : ModuleRules

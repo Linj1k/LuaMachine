@@ -129,6 +129,7 @@ void ULuaBlueprintFunctionLibrary::LuaStateDestroy(UObject* WorldContextObject, 
 	if (!L)
 		return;
 	FLuaMachineModule::Get().UnregisterLuaState(L);
+	L = nullptr;
 }
 
 void ULuaBlueprintFunctionLibrary::LuaStateReload(UObject* WorldContextObject, TSubclassOf<ULuaState> State)
@@ -137,6 +138,7 @@ void ULuaBlueprintFunctionLibrary::LuaStateReload(UObject* WorldContextObject, T
 	if (!L)
 		return;
 	FLuaMachineModule::Get().UnregisterLuaState(L);
+	L = nullptr;
 	FLuaMachineModule::Get().GetLuaState(State, WorldContextObject->GetWorld());
 }
 
@@ -2032,4 +2034,14 @@ ULuaState* ULuaBlueprintFunctionLibrary::CreateDynamicLuaState(UObject* WorldCon
 	}
 
 	return NewLuaState->GetLuaState(WorldContextObject->GetWorld());
+}
+
+void ULuaBlueprintFunctionLibrary::CleanUpLuaStates()
+{
+	FLuaMachineModule::Get().CleanupLuaStates(false);
+}
+
+ULuaState* ULuaBlueprintFunctionLibrary::GetLuaStateByStateClass(UObject* WorldContextObject, TSubclassOf<ULuaState> StateClass)
+{
+	return FLuaMachineModule::Get().GetLuaState(StateClass, WorldContextObject->GetWorld(), true);
 }

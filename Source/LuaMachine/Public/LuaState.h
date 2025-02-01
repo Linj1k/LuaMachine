@@ -246,6 +246,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure,  Category = "Lua")
 	FLuaValue GetLuaBlueprintPackageTable(const FString& PackageName);
 
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	FString ExecuteUGCFunction(const FString& Code);
+
 	void FromLuaValue(FLuaValue& LuaValue, UObject* CallContext = nullptr, lua_State* State = nullptr);
 	FLuaValue ToLuaValue(int Index, lua_State* State = nullptr);
 
@@ -506,7 +509,7 @@ protected:
 	FLuaValue UserDataMetaTable;
 
 	virtual void LuaStateInit();
-
+	
 	FDelegateHandle GCLuaDelegatesHandle;
 
 	UPROPERTY()

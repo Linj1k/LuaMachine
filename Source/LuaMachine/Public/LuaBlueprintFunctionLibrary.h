@@ -430,6 +430,12 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "Lua")
 	static ULuaState* CreateDynamicLuaState(UObject* WorldContextObject, TSubclassOf<ULuaState> LuaStateClass);
 
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", ToolTip = "Removes all lua states"), Category = "Lua")
+	static void CleanUpLuaStates();
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
+	static ULuaState* GetLuaStateByStateClass(UObject* WorldContextObject, TSubclassOf<ULuaState> StateClass);
+
 private:
 	static void HttpRequestDone(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful, TSubclassOf<ULuaState> LuaState, TWeakObjectPtr<UWorld> World, const FString SecurityHeader, const FString SignaturePublicExponent, const FString SignatureModulus, FLuaHttpSuccess Completed);
 	static void HttpGenericRequestDone(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful, TWeakPtr<FLuaSmartReference> Context, FLuaHttpResponseReceived ResponseReceived, FLuaHttpError Error);

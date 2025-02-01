@@ -98,5 +98,9 @@ public:
 	ULuaState* LuaComponentGetState();
 
 	virtual void OnRegister() override;
+	
 
+	// Blueprint Variable but only for internal use
+	UPROPERTY(BlueprintReadOnly, Category = "Lua")
+	TMap<FString, FLuaValue> SelfTable;
 };

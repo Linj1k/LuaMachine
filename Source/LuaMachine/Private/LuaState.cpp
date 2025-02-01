@@ -322,6 +322,85 @@ FLuaValue ULuaState::GetLuaBlueprintPackageTable(const FString& PackageName)
 	return LuaBlueprintPackages[PackageName]->SelfTable;
 }
 
+void setup_sandbox(lua_State* L) {
+	// Crée une table d'environnement pour le sandbox
+	lua_newtable(L);
+	int sandbox_globals_index = lua_gettop(L);
+
+	// Crée une table d'environnement sans interaction avec _G global
+	lua_newtable(L);
+
+	// Crée un métatable pour contrôler les accès (lecture/écriture)
+	lua_newtable(L);
+
+	// __index : permet l'accès à la table sandbox_globals (lecture des variables)
+	lua_pushliteral(L, "__index");
+	lua_pushvalue(L, sandbox_globals_index); // Référence la table sandbox_globals
+	lua_rawset(L, -3);
+
+	// __newindex : redirige l'écriture vers la table sandbox_globals
+	lua_pushliteral(L, "__newindex");
+	lua_pushvalue(L, sandbox_globals_index); // Référence la table sandbox_globals
+	lua_rawset(L, -3);
+
+	// Applique la métatable à l'environnement
+	lua_setmetatable(L, -2);
+
+	// Définit cette table comme _G pour le thread (cela isole l'environnement)
+	lua_pushvalue(L, -1); // Duplique la table d'environnement
+	lua_setglobal(L, "_G");
+
+	// Nettoie la pile (supprime la référence à sandbox_globals)
+	lua_pop(L, 1);
+}
+
+void interruption_hook(lua_State* L, lua_Debug* ar) {
+	luaL_error(L, "Execution interrupted: instruction limit exceeded.");
+}
+
+FString ULuaState::ExecuteUGCFunction(const FString& Code)
+{
+	std::string user_code_str(TCHAR_TO_UTF8(*Code));
+
+    // Crée un thread Lua
+    lua_State* thread = lua_newthread(L);
+
+    setup_sandbox(thread);
+
+    lua_sethook(thread, interruption_hook, LUA_MASKCOUNT, HookInstructionCount);
+
+    // Charge le code utilisateur
+    if (luaL_loadstring(thread, user_code_str.c_str()) != LUA_OK) {
+        FString ErrorS = ANSI_TO_TCHAR(lua_tostring(thread, -1));
+        UE_LOG(LogLuaMachine, Error, TEXT("%s"), *ErrorS);
+        lua_pop(thread, 1);
+        lua_pop(L, 1);
+        return ErrorS;
+    }
+
+    // Exécute le code utilisateur
+    int status = lua_resume(thread, NULL, 0);
+    if (status == LUA_OK) {
+        UE_LOG(LogLuaMachine, Display, TEXT("Le thread s'est terminé avec succès."));
+        lua_pop(thread, 1);
+        lua_pop(L, 1);
+        return "Success";
+    }
+    else if (status == LUA_YIELD) {
+        UE_LOG(LogLuaMachine, Display, TEXT("Le thread a été mis en pause."));
+        lua_pop(thread, 1);
+        lua_pop(L, 1);
+        return "Yield";
+    }
+    else {
+        FString ErrorS = ANSI_TO_TCHAR(lua_tostring(thread, -1));
+        UE_LOG(LogLuaMachine, Error, TEXT("%s"), *ErrorS);
+        lua_pop(thread, 1);
+        lua_pop(L, 1);
+        return ErrorS;
+    }
+}
+
 bool ULuaState::RunCodeAsset(ULuaCode* CodeAsset, int NRet)
 {
 
@@ -1002,6 +1081,8 @@ int ULuaState::MetaTableFunction__call(lua_State* L)
 			}
 		}
 	}
+	else {
+	}
 
 	FScopeCycleCounterUObject ObjectScope(CallScope);
 	FScopeCycleCounterUObject FunctionScope(LuaCallContext->Function.Get());
@@ -1618,7 +1699,7 @@ void ULuaState::ReceiveLuaLineHook_Implementation(const FLuaDebug & LuaDebug)
 
 void ULuaState::ReceiveLuaCountHook(const FLuaDebug & LuaDebug)
 {
-
+	luaL_error(L, "Execution interrupted: instruction limit exceeded.");
 }
 
 void ULuaState::ReceiveLuaLevelRemovedFromWorld_Implementation(ULevel * Level, UWorld * World)

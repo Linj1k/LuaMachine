@@ -157,8 +157,9 @@ FLuaValue& FLuaValue::operator = (const FLuaValue& SourceValue)
 	// make a new reference to the table, to avoid it being destroyed
 	if (LuaRef != LUA_NOREF)
 	{
-		LuaState->GetRef(LuaRef);
-		LuaRef = LuaState->NewRef();
+		if (LuaState.IsValid())
+			LuaState->GetRef(LuaRef);
+			LuaRef = LuaState->NewRef();
 	}
 
 	return *this;
